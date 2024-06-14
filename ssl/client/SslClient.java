@@ -1,44 +1,41 @@
 package ssl.client;
 
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.security.KeyManagementException;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
 import java.util.Scanner;
 import javax.net.ssl.*;
 
 public class SslClient {
 
     public static void main(String[] args) {
+        // System.setProperty("javax.net.debug", "all");
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
-            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
             TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance("SunX509");
-            KeyStore keyStore = KeyStore.getInstance("JKS");
             KeyStore trustStore = KeyStore.getInstance("JKS");
-
-            char[] password = "hogehoge".toCharArray();
-
-            keyStore.load(new FileInputStream("./java_ssl_experiment/ssl/client/keystore.jks"), password);
-            trustStore.load(new FileInputStream("./java_ssl_experiment/ssl/client/truststore.jks"), password);
-
-            keyManagerFactory.init(keyStore, password);
+            char[] truststorePassword = "password".toCharArray();
+            trustStore.load(new FileInputStream("./ssl/client/truststore.jks"), truststorePassword);
             trustManagerFactory.init(trustStore);
-
-            sslContext.init(keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
-
+            sslContext.init(null, trustManagerFactory.getTrustManagers(), new SecureRandom());
             SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-            SSLSocket socket = (SSLSocket) sslSocketFactory.createSocket("127.0.0.1", 3839);
-
-            PrintWriter output = new PrintWriter(socket.getOutputStream(), true);
-            output.println(args[0]);
-
-            Scanner input = new Scanner(socket.getInputStream());
-            System.out.println("Message : " + input.nextLine());
-
-            output.close();
-            input.close();
-            socket.close();
-        } catch (Exception e) {
+            try (SSLSocket socket = (SSLSocket) sslSocketFactory.createSocket("127.0.0.1", 3839)) {
+                try (PrintWriter output = new PrintWriter(socket.getOutputStream(), true)) {
+                    output.println(args[0]);
+                    output.flush();
+                    try (Scanner input = new Scanner(socket.getInputStream())) {
+                        System.out.println("Message : " + input.nextLine());
+                        socket.shutdownOutput();
+                    }
+                }
+            }
+        } catch (IOException | KeyManagementException | KeyStoreException | NoSuchAlgorithmException | CertificateException e) {
             System.out.println(e);
         }
     }
